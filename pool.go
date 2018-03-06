@@ -48,26 +48,25 @@ func (this *Pool) get() (conn Connection, err error) {
 		this.mu.Lock()
 		var item = this.idleList.Front()
 		if item != nil && item.Value != nil {
-			if conn, ok := item.Value.(idleConn); ok {
+			if idleConn, ok := item.Value.(idleConn); ok {
 				this.idleList.Remove(item)
-				if this.IdleTimeout > 0 && time.Now().After(conn.t.Add(this.IdleTimeout)) {
-					conn.conn.Close()
-					this.release()
+				if this.IdleTimeout > 0 && time.Now().After(idleConn.t.Add(this.IdleTimeout)) {
+					this.release(idleConn.conn)
 					continue
 				}
 				if this.TestOnBorrow != nil {
-					if err = this.TestOnBorrow(conn.conn, conn.t); err != nil {
-						conn.conn.Close()
-						this.release()
+					if err = this.TestOnBorrow(idleConn.conn, idleConn.t); err != nil {
+						this.release(idleConn.conn)
 						continue
 					}
 				}
 				this.mu.Unlock()
-				return conn.conn, nil
+				return idleConn.conn, nil
 			}
 		}
 
 		if this.running == false {
+			this.mu.Unlock()
 			return nil, errors.New("Get on closed pool")
 		}
 
@@ -95,7 +94,8 @@ func (this *Pool) Release(conn Connection, forceClose bool) {
 	}
 }
 
-func (this *Pool) release() {
+func (this *Pool) release(conn Connection) {
+	conn.Close()
 	this.active -= 1
 	this.cond.Signal()
 }
@@ -123,8 +123,7 @@ func (this *Pool) put(conn Connection, forceClose bool) {
 		return
 	}
 
-	conn.Close()
-	this.release()
+	this.release(conn)
 }
 
 func (this *Pool) Close() error {
