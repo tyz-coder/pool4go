@@ -95,8 +95,10 @@ func (this *Pool) Release(conn Connection, forceClose bool) {
 }
 
 func (this *Pool) release(conn Connection) {
-	conn.Close()
-	this.active -= 1
+	if conn != nil {
+		conn.Close()
+		this.active -= 1
+	}
 	this.cond.Signal()
 }
 
@@ -114,13 +116,6 @@ func (this *Pool) put(conn Connection, forceClose bool) {
 		} else {
 			conn = nil
 		}
-	}
-
-	if conn == nil {
-		if this.cond != nil {
-			this.cond.Signal()
-		}
-		return
 	}
 
 	this.release(conn)
