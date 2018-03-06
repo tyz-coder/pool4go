@@ -2,11 +2,11 @@ package pool4go
 
 import "time"
 
-type Connection interface {
+type Conn interface {
 	Close() error
 }
 
 type idleConn struct {
-	conn Connection
-	t    time.Time
+	c Conn
+	t time.Time
 }

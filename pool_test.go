@@ -14,7 +14,7 @@ func (this *session) Close() error {
 }
 
 func BenchmarkPool4go_Get(b *testing.B) {
-	var p = NewPool(func() (Connection, error) {
+	var p = NewPool(func() (Conn, error) {
 		var s = &session{}
 		fmt.Println("create connection")
 		return s, nil
