@@ -11,23 +11,27 @@ type Pool struct {
 	DialFunc     func() (Conn, error)
 	TestOnBorrow func(conn Conn, t time.Time) error
 
-	MaxIdle     int
-	MaxActive   int
+	numOpenConn int
+	maxIdleConn int
+	maxOpenConn int
 	IdleTimeout time.Duration
 
-	active   int
 	running  bool
 	idleList *list.List
 	mu       *sync.Mutex
 	cond     *sync.Cond
 }
 
-func NewPool(dialFunc func() (Conn, error), maxIdle int) *Pool {
+const (
+	k_DEFAULT_MAX_IDLE_CONN = 2
+)
+
+func NewPool(dialFunc func() (Conn, error)) *Pool {
 	var p = &Pool{}
 	p.DialFunc = dialFunc
-	p.MaxIdle = maxIdle
-	p.MaxActive = maxIdle + 5
-	p.active = 0
+	p.maxIdleConn = k_DEFAULT_MAX_IDLE_CONN
+	p.maxOpenConn = k_DEFAULT_MAX_IDLE_CONN
+	p.numOpenConn = 0
 	p.running = true
 	p.idleList = list.New()
 	p.mu = &sync.Mutex{}
@@ -70,13 +74,13 @@ func (this *Pool) get() (c Conn, err error) {
 			return nil, errors.New("Get on closed pool")
 		}
 
-		if this.MaxActive <= 0 || this.active < this.MaxActive {
+		if this.maxOpenConn <= 0 || this.numOpenConn < this.maxOpenConn {
 			c, err := this.DialFunc()
 			if err != nil {
 				c = nil
 			}
 			if c != nil {
-				this.active += 1
+				this.numOpenConn += 1
 			}
 			this.mu.Unlock()
 			return c, nil
@@ -97,7 +101,7 @@ func (this *Pool) Release(c Conn, forceClose bool) {
 func (this *Pool) release(c Conn) {
 	if c != nil {
 		c.Close()
-		this.active -= 1
+		this.numOpenConn -= 1
 	}
 	this.cond.Signal()
 }
@@ -111,7 +115,7 @@ func (this *Pool) put(c Conn, forceClose bool) {
 
 	if forceClose == false {
 		this.idleList.PushFront(idleConn{t: time.Now(), c: c})
-		if this.idleList.Len() > this.MaxIdle {
+		if this.idleList.Len() > this.maxIdleConn {
 			c = this.idleList.Remove(this.idleList.Back()).(idleConn).c
 		} else {
 			c = nil
@@ -127,7 +131,7 @@ func (this *Pool) Close() error {
 		return nil
 	}
 	this.running = false
-	this.active = 0
+	this.numOpenConn = 0
 	this.cond.Broadcast()
 	var idle = this.idleList
 	this.idleList.Init()
@@ -139,8 +143,61 @@ func (this *Pool) Close() error {
 	return nil
 }
 
-func (this *Pool) ActiveCount() int {
+func (this *Pool) NumOpenConns() int {
 	this.mu.Lock()
 	defer this.mu.Unlock()
-	return this.active
+	return this.numOpenConn
+}
+
+func (this *Pool) SetMaxIdleConns(n int) {
+	this.mu.Lock()
+	defer this.mu.Unlock()
+
+	if n <= 0 {
+		this.maxIdleConn = 0
+	} else {
+		this.maxIdleConn = n
+	}
+
+	if this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn {
+		this.maxIdleConn = this.maxOpenConn
+	}
+
+	for {
+		if this.idleList.Len() <= this.maxIdleConn {
+			this.cond.Signal()
+			return
+		}
+
+		var c = this.idleList.Remove(this.idleList.Back()).(idleConn).c
+		if c != nil {
+			c.Close()
+			this.numOpenConn -= 1
+		}
+	}
+}
+
+func (this *Pool) MaxIdleConns() int {
+	this.mu.Lock()
+	defer this.mu.Unlock()
+	return this.maxIdleConn
+}
+
+func (this *Pool) SetMaxOpenConns(n int) {
+	this.mu.Lock()
+	this.maxOpenConn = n
+	if n <= 0 {
+		this.maxOpenConn = 0
+	}
+	syncMaxIdle := this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn
+	this.mu.Unlock()
+	if syncMaxIdle {
+		this.SetMaxIdleConns(this.maxOpenConn)
+	}
+}
+
+func (this *Pool) MaxOpenConns() int {
+	this.mu.Lock()
+	defer this.mu.Unlock()
+	return this.maxOpenConn
 }

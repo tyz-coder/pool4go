@@ -3,7 +3,20 @@ package pool4go
 import (
 	"testing"
 	"fmt"
+	"os"
 )
+
+var p *Pool
+
+func TestMain(m *testing.M) {
+	p = NewPool(func() (Conn, error) {
+		var s = &session{}
+		fmt.Println("create connection")
+		return s, nil
+	})
+
+	os.Exit(m.Run())
+}
 
 type session struct {
 
@@ -14,20 +27,15 @@ func (this *session) Close() error {
 }
 
 func BenchmarkPool4go_Get(b *testing.B) {
-	var p = NewPool(func() (Conn, error) {
-		var s = &session{}
-		fmt.Println("create connection")
-		return s, nil
-	}, 10)
-	p.MaxActive = 15
-
 	for i:=0; i<b.N; i++ {
-		var s, err = p.Get()
-		if err != nil {
-			fmt.Println(err)
-		}
-		if s != nil {
-			p.Release(s, false)
-		}
+		 func() {
+			var s, err = p.Get()
+			if err != nil {
+				fmt.Println(err)
+			}
+			if s != nil {
+				p.Release(s, false)
+			}
+		}()
 	}
 }
