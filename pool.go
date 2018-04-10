@@ -52,7 +52,7 @@ func (this *Pool) get() (c Conn, err error) {
 		this.mu.Lock()
 		var item = this.idleList.Front()
 		if item != nil && item.Value != nil {
-			if idleConn, ok := item.Value.(idleConn); ok {
+			if idleConn, ok := item.Value.(*idleConn); ok {
 				this.idleList.Remove(item)
 				if this.IdleTimeout > 0 && time.Now().After(idleConn.t.Add(this.IdleTimeout)) {
 					this.release(idleConn.c)
@@ -114,9 +114,9 @@ func (this *Pool) put(c Conn, forceClose bool) {
 	}
 
 	if forceClose == false {
-		this.idleList.PushFront(idleConn{t: time.Now(), c: c})
+		this.idleList.PushFront(&idleConn{t: time.Now(), c: c})
 		if this.idleList.Len() > this.maxIdleConn {
-			c = this.idleList.Remove(this.idleList.Back()).(idleConn).c
+			c = this.idleList.Remove(this.idleList.Back()).(*idleConn).c
 		} else {
 			c = nil
 		}
@@ -138,7 +138,7 @@ func (this *Pool) Close() error {
 	this.mu.Unlock()
 
 	for item := idle.Front(); item != nil; item = item.Next() {
-		item.Value.(idleConn).c.Close()
+		item.Value.(*idleConn).c.Close()
 	}
 	return nil
 }
@@ -169,7 +169,7 @@ func (this *Pool) SetMaxIdleConns(n int) {
 			return
 		}
 
-		var c = this.idleList.Remove(this.idleList.Back()).(idleConn).c
+		var c = this.idleList.Remove(this.idleList.Back()).(*idleConn).c
 		if c != nil {
 			c.Close()
 			this.numOpenConn -= 1
