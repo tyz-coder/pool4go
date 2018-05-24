@@ -127,19 +127,17 @@ func (this *Pool) put(c Conn, forceClose bool) {
 
 func (this *Pool) Close() error {
 	this.mu.Lock()
+	defer this.mu.Unlock()
 	if this.running == false {
 		return nil
 	}
 	this.running = false
 	this.numOpenConn = 0
 	this.cond.Broadcast()
-	var idle = this.idleList
-	this.idleList.Init()
-	this.mu.Unlock()
-
-	for item := idle.Front(); item != nil; item = item.Next() {
+	for item := this.idleList.Front(); item != nil; item = item.Next() {
 		item.Value.(*idleConn).c.Close()
 	}
+	this.idleList.Init()
 	return nil
 }
 
