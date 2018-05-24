@@ -109,7 +109,13 @@ func (this *Pool) release(c Conn) {
 func (this *Pool) put(c Conn, forceClose bool) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
-	if this.running == false || c == nil {
+
+	if c == nil {
+		return
+	}
+
+	if this.running == false {
+		this.release(c)
 		return
 	}
 
