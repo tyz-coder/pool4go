@@ -56,11 +56,13 @@ func (this *Pool) get() (c Conn, err error) {
 				this.idleList.Remove(item)
 				if this.IdleTimeout > 0 && time.Now().After(idleConn.t.Add(this.IdleTimeout)) {
 					this.release(idleConn.c)
+					this.mu.Unlock()
 					continue
 				}
 				if this.TestOnBorrow != nil {
 					if err = this.TestOnBorrow(idleConn.c, idleConn.t); err != nil {
 						this.release(idleConn.c)
+						this.mu.Unlock()
 						continue
 					}
 				}

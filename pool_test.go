@@ -1,9 +1,9 @@
 package pool4go
 
 import (
-	"testing"
 	"fmt"
 	"os"
+	"testing"
 )
 
 var p *Pool
@@ -19,7 +19,6 @@ func TestMain(m *testing.M) {
 }
 
 type session struct {
-
 }
 
 func (this *session) Close() error {
@@ -27,8 +26,8 @@ func (this *session) Close() error {
 }
 
 func BenchmarkPool4go_Get(b *testing.B) {
-	for i:=0; i<b.N; i++ {
-		 func() {
+	for i := 0; i < b.N; i++ {
+		func() {
 			var s, err = p.Get()
 			if err != nil {
 				fmt.Println(err)
