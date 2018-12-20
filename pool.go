@@ -85,7 +85,7 @@ func (this *Pool) get() (c Conn, err error) {
 				this.numOpenConn += 1
 			}
 			this.mu.Unlock()
-			return c, nil
+			return c, err
 		}
 
 		this.cond.Wait()
