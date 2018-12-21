@@ -23,14 +23,15 @@ type Pool struct {
 }
 
 const (
-	k_DEFAULT_MAX_IDLE_CONN = 2
+	kMaxIdleConn = 2
+	KMaxOpenConn = kMaxIdleConn * 2
 )
 
 func NewPool(dialFunc func() (Conn, error)) *Pool {
 	var p = &Pool{}
 	p.DialFunc = dialFunc
-	p.maxIdleConn = k_DEFAULT_MAX_IDLE_CONN
-	p.maxOpenConn = k_DEFAULT_MAX_IDLE_CONN
+	p.maxIdleConn = kMaxIdleConn
+	p.maxOpenConn = KMaxOpenConn
 	p.numOpenConn = 0
 	p.running = true
 	p.idleList = list.New()
