@@ -24,7 +24,7 @@ type Pool struct {
 
 const (
 	kMaxIdleConn = 2
-	KMaxOpenConn = kMaxIdleConn * 2
+	KMaxOpenConn = 4
 )
 
 func NewPool(dialFunc func() (Conn, error)) *Pool {
