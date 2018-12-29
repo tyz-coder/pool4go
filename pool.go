@@ -159,16 +159,14 @@ func (this *Pool) NumOpenConns() int {
 func (this *Pool) SetMaxIdleConns(n int) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
-
-	if n <= 0 {
+	this.maxIdleConn = n
+	if this.maxIdleConn < 0 {
 		this.maxIdleConn = 0
-	} else {
-		this.maxIdleConn = n
 	}
 
-	if this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn {
-		this.maxIdleConn = this.maxOpenConn
-	}
+	//if this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn {
+	//	this.maxIdleConn = this.maxOpenConn
+	//}
 
 	for {
 		if this.idleList.Len() <= this.maxIdleConn {
@@ -193,14 +191,16 @@ func (this *Pool) MaxIdleConns() int {
 func (this *Pool) SetMaxOpenConns(n int) {
 	this.mu.Lock()
 	this.maxOpenConn = n
-	if n <= 0 {
+	if this.maxOpenConn < 0 {
 		this.maxOpenConn = 0
 	}
-	syncMaxIdle := this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn
+
+	//syncMaxIdle := this.maxOpenConn > 0 && this.maxIdleConn > this.maxOpenConn
+	//this.mu.Unlock()
+	//if syncMaxIdle {
+	//	this.SetMaxIdleConns(this.maxOpenConn)
+	//}
 	this.mu.Unlock()
-	if syncMaxIdle {
-		this.SetMaxIdleConns(this.maxOpenConn)
-	}
 }
 
 func (this *Pool) MaxOpenConns() int {
