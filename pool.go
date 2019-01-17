@@ -74,7 +74,7 @@ func (this *Pool) get() (c Conn, err error) {
 
 		if this.running == false {
 			this.mu.Unlock()
-			return nil, errors.New("Get on closed pool")
+			return nil, errors.New("get on closed pool")
 		}
 
 		if this.maxOpenConn <= 0 || this.numOpenConn < this.maxOpenConn {
