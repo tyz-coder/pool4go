@@ -6,7 +6,7 @@ import (
 )
 
 func main() {
-	var p = pool4go.NewPool(func() (pool4go.Conn, error) {
+	var p = pool4go.New(func() (pool4go.Conn, error) {
 		var c = &Conn{}
 		fmt.Println("new")
 		return c, nil
@@ -31,7 +31,7 @@ func main() {
 				//time.Sleep(time.Second * 1)
 				//fmt.Println("do...")
 
-				p.Release(c, false)
+				p.Put(c)
 			}
 		}()
 	}

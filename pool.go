@@ -7,9 +7,35 @@ import (
 	"time"
 )
 
-type Pool struct {
-	DialFunc     func() (Conn, error)
-	TestOnBorrow func(conn Conn, t time.Time) error
+var ErrClosedPool = errors.New("pool4go: get on closed pool")
+
+type Pool interface {
+	Get() (c Conn, err error)
+
+	Put(c Conn)
+
+	Release(c Conn)
+
+	Close() error
+
+	NumOpenConns() int
+
+	SetMaxIdleConns(n int)
+
+	MaxIdleConns() int
+
+	SetMaxOpenConns(n int)
+
+	MaxOpenConns() int
+
+	SetTestOnBorrow(f func(conn Conn, t time.Time) error)
+
+	SetIdleTimeout(t time.Duration)
+}
+
+type pool struct {
+	newFunc          func() (Conn, error)
+	testOnBorrowFunc func(conn Conn, t time.Time) error
 
 	numOpenConn int
 	maxIdleConn int
@@ -27,9 +53,9 @@ const (
 	KMaxOpenConn = 4
 )
 
-func NewPool(dialFunc func() (Conn, error)) *Pool {
-	var p = &Pool{}
-	p.DialFunc = dialFunc
+func New(dialFunc func() (Conn, error)) Pool {
+	var p = &pool{}
+	p.newFunc = dialFunc
 	p.maxIdleConn = kMaxIdleConn
 	p.maxOpenConn = KMaxOpenConn
 	p.numOpenConn = 0
@@ -40,7 +66,7 @@ func NewPool(dialFunc func() (Conn, error)) *Pool {
 	return p
 }
 
-func (this *Pool) Get() (c Conn, err error) {
+func (this *pool) Get() (c Conn, err error) {
 	c, err = this.get()
 	if err != nil {
 		return nil, err
@@ -48,7 +74,7 @@ func (this *Pool) Get() (c Conn, err error) {
 	return c, nil
 }
 
-func (this *Pool) get() (c Conn, err error) {
+func (this *pool) get() (c Conn, err error) {
 	for {
 		this.mu.Lock()
 		var item = this.idleList.Front()
@@ -60,8 +86,8 @@ func (this *Pool) get() (c Conn, err error) {
 					this.mu.Unlock()
 					continue
 				}
-				if this.TestOnBorrow != nil {
-					if err = this.TestOnBorrow(idleConn.c, idleConn.t); err != nil {
+				if this.testOnBorrowFunc != nil {
+					if err = this.testOnBorrowFunc(idleConn.c, idleConn.t); err != nil {
 						this.release(idleConn.c)
 						this.mu.Unlock()
 						continue
@@ -74,11 +100,11 @@ func (this *Pool) get() (c Conn, err error) {
 
 		if this.running == false {
 			this.mu.Unlock()
-			return nil, errors.New("get on closed pool")
+			return nil, ErrClosedPool
 		}
 
 		if this.maxOpenConn <= 0 || this.numOpenConn < this.maxOpenConn {
-			c, err := this.DialFunc()
+			c, err := this.newFunc()
 			if err != nil {
 				c = nil
 			}
@@ -95,21 +121,13 @@ func (this *Pool) get() (c Conn, err error) {
 	return nil, nil
 }
 
-func (this *Pool) Release(c Conn, forceClose bool) {
+func (this *pool) Put(c Conn) {
 	if c != nil {
-		this.put(c, forceClose)
+		this.put(c, false)
 	}
 }
 
-func (this *Pool) release(c Conn) {
-	if c != nil {
-		c.Close()
-		this.numOpenConn -= 1
-	}
-	this.cond.Signal()
-}
-
-func (this *Pool) put(c Conn, forceClose bool) {
+func (this *pool) put(c Conn, close bool) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 
@@ -122,7 +140,7 @@ func (this *Pool) put(c Conn, forceClose bool) {
 		return
 	}
 
-	if forceClose == false {
+	if close == false {
 		this.idleList.PushFront(&idleConn{t: time.Now(), c: c})
 		if this.idleList.Len() > this.maxIdleConn {
 			c = this.idleList.Remove(this.idleList.Back()).(*idleConn).c
@@ -134,7 +152,21 @@ func (this *Pool) put(c Conn, forceClose bool) {
 	this.release(c)
 }
 
-func (this *Pool) Close() error {
+func (this *pool) Release(c Conn) {
+	if c != nil {
+		this.put(c, true)
+	}
+}
+
+func (this *pool) release(c Conn) {
+	if c != nil {
+		c.Close()
+		this.numOpenConn -= 1
+	}
+	this.cond.Signal()
+}
+
+func (this *pool) Close() error {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	if this.running == false {
@@ -150,13 +182,13 @@ func (this *Pool) Close() error {
 	return nil
 }
 
-func (this *Pool) NumOpenConns() int {
+func (this *pool) NumOpenConns() int {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	return this.numOpenConn
 }
 
-func (this *Pool) SetMaxIdleConns(n int) {
+func (this *pool) SetMaxIdleConns(n int) {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	this.maxIdleConn = n
@@ -182,13 +214,13 @@ func (this *Pool) SetMaxIdleConns(n int) {
 	}
 }
 
-func (this *Pool) MaxIdleConns() int {
+func (this *pool) MaxIdleConns() int {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	return this.maxIdleConn
 }
 
-func (this *Pool) SetMaxOpenConns(n int) {
+func (this *pool) SetMaxOpenConns(n int) {
 	this.mu.Lock()
 	this.maxOpenConn = n
 	if this.maxOpenConn < 0 {
@@ -203,8 +235,16 @@ func (this *Pool) SetMaxOpenConns(n int) {
 	this.mu.Unlock()
 }
 
-func (this *Pool) MaxOpenConns() int {
+func (this *pool) MaxOpenConns() int {
 	this.mu.Lock()
 	defer this.mu.Unlock()
 	return this.maxOpenConn
+}
+
+func (this *pool) SetTestOnBorrow(f func(conn Conn, t time.Time) error) {
+	this.testOnBorrowFunc = f
+}
+
+func (this *pool) SetIdleTimeout(t time.Duration) {
+	this.IdleTimeout = t
 }

@@ -6,10 +6,10 @@ import (
 	"testing"
 )
 
-var p *Pool
+var p Pool
 
 func TestMain(m *testing.M) {
-	p = NewPool(func() (Conn, error) {
+	p = New(func() (Conn, error) {
 		var s = &session{}
 		fmt.Println("create connection")
 		return s, nil
@@ -33,7 +33,7 @@ func BenchmarkPool4go_Get(b *testing.B) {
 				fmt.Println(err)
 			}
 			if s != nil {
-				p.Release(s, false)
+				p.Put(s)
 			}
 		}()
 	}
