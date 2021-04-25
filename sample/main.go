@@ -2,7 +2,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/smartwalle/pool4go"
+	"github.com/tyz-coder/pool4go"
 )
 
 func main() {
